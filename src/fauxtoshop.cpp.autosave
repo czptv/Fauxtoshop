@@ -1,0 +1,283 @@
+// This is the CPP file you will edit and turn in.
+// Also remove these comments here and add your own.
+// TODO: rewrite this comment
+
+#include <iostream>
+#include "filelib.h"
+#include "console.h"
+#include "gwindow.h"
+#include "grid.h"
+#include "simpio.h"
+#include "strlib.h"
+#include "gbufferedimage.h"
+#include "gevents.h"
+
+using namespace std;
+
+static const int    WHITE = 0xFFFFFF;
+static const int    BLACK = 0x000000;
+static const int    GREEN = 0x00FF00;
+
+static bool     openImageFromFilename(GBufferedImage &img, string filename);
+static bool 	saveImageToFilename(const GBufferedImage &img, string filename);
+static void     getMouseClickLocation(int &row, int &col);
+static string   openFile(istream & infile, string prompt, GBufferedImage & img);
+static int      chooseFilter();
+static void     dealWithImage(GBufferedImage & img, int n);
+static void     convertColor(Grid<int> & original);
+static void     scatter(GBufferedImage &img, const Grid<int> & original);
+static int      askForNumber(string prompt, int min, int max);
+static void     detectEdge(GBufferedImage & img,const Grid<int> & original);
+static bool     isEdge(const Grid<int> & original, int row, int col, int diff);
+static int      calculateDifference(int red, int green, int blue, int r, int g, int b);
+static int      getChoice(string prompt);
+static void     saveImage(const GBufferedImage & img);
+
+/* Depending on how you approach your problem decomposition, you
+ * may want to rewrite some of these lines, move them inside loops,
+ * or move them inside helper functions, etc.
+ *
+ * TODO: rewrite this comment.
+ */
+int main() {
+    GWindow gw;
+    gw.setTitle("Fauxtoshop");
+    gw.setVisible(true);
+    GBufferedImage img;
+    while (true) {
+        ifstream infile;
+        cout << "Welcome to Fauxtoshop!" << endl;
+        string prompt = "Enter the name of image file to open (or blank to quit):";
+        string filename= openFile(infile, prompt, img);
+        if (filename == "") break;
+        gw.setSize(img.getWidth(), img.getHeight());
+        gw.add(&img,0,0);
+        int choice = chooseFilter();
+        dealWithImage(img, choice);
+        saveImage(img);
+    }
+
+
+    /*int row, col;
+    getMouseClickLocation(row, col);*/
+    return 0;
+}
+
+static string openFile(istream & infile, string prompt, GBufferedImage & img) {
+    string filename;
+    while (true) {
+        cout <<prompt;
+        getLine(cin, filename);
+        if(filename == "") break;
+        if(openImageFromFilename(img, filename)) {
+            cout << "Opening image file, may take a minute..." << endl;
+            break;
+        }
+    }
+    return filename;
+}
+
+/* STARTER CODE HELPER FUNCTION - DO NOT EDIT
+ *
+ * Attempts to open the image file 'filename'.
+ *
+ * This function returns true when the image file was successfully
+ * opened and the 'img' object now contains that image, otherwise it
+ * returns false.
+ */
+static bool openImageFromFilename(GBufferedImage &img, string filename) {
+    try { img.load(filename); }
+    catch (...) { return false; }
+    return true;
+
+}
+
+/*
+ * Display a menu of filter effect option.
+ * If the user enters an error input, repompt user with the menu.
+ */
+
+static int chooseFilter() {
+    int n;
+    while (true) {
+        cout << "Which image filter would you like to apply?" << endl;
+        cout << "         1 - Scatter" << endl;
+        cout << "         2 - Edge detection" << endl;
+        cout << "         3 - \"Green screen\" with another image" << endl;
+        cout << "         4 - Compare image with another image" << endl;
+        n = getChoice("Your choice:");
+        if(n==1 || n==2 || n==3 || n==4) break;
+    }
+    return n;
+}
+
+/*
+ * Detect the input and transform it into an integer if it is valid.
+ */
+static int getChoice(string prompt) {
+    int value;
+    string line;
+    cout << prompt;
+    getline(cin, line);
+    istringstream stream(line);
+    stream >> value >> ws;
+    if (!stream.fail() && stream.eof()) return value;
+    return 5;
+}
+
+/*
+ * Decide how to deal with image according to the number given by user.
+ */
+
+static void dealWithImage(GBufferedImage & img, int n) {
+    Grid<int> original = img.toGrid();
+    switch (n) {
+    case 1:
+        scatter(img, original);
+        break;
+    case 2:
+        detectEdge(img, original);
+        break;
+    case 3:
+        greenScreen(img, original);
+        break;
+    case 4:
+        //compareImg();
+        break;
+    }
+}
+
+/*
+ * scatter the image by using the RGB value in grid within radius and bound.
+ */
+static void scatter(GBufferedImage & img,const Grid<int> & original) {
+    int r = askForNumber("Enter degree of scatter [1-100]:", 0, 101); //for radius
+    Grid<int> scatterGrid(original.numRows(), original.numCols());
+    for (int row = 0; row < original.numRows(); row++) {
+        for (int col = 0; col < original.numCols(); col++) {
+            while (true) {
+                int rrow = row + randomInteger(1,r);
+                int rcol = col + randomInteger(1,r);
+                if(original.inBounds(rrow, rcol)) {
+                    scatterGrid[row][col] = original[rrow][rcol];
+                    break;
+                }
+            }
+        }
+    }
+    img.fromGrid(scatterGrid);
+}
+
+/*
+ * ask user for the radius of scatter
+ */
+static int askForNumber(string prompt, int min, int max) {
+    int r;
+    while (true) {
+        r = getInteger(prompt);
+        if (r > min && r < max) break;
+    }
+    return r;
+}
+
+/*
+ * Detect the edge of image, and make it black and the rest white
+ */
+
+static void detectEdge(GBufferedImage & img,const Grid<int> & original) {
+    int diff = askForNumber("Enter threshold for edge detection:", 0, 256);
+    Grid<int> edgeGrid(original.numRows(), original.numCols());
+    for (int row = 0; row < original.numRows(); row++) {
+        for (int col = 0; col < original.numCols(); col++) {
+            while (true) {
+                if (isEdge(original, row, col, diff)) {
+                    edgeGrid[row][col] = BLACK;
+                } else {
+                    edgeGrid[row][col] = WHITE;
+                }
+            }
+        }
+    }
+    img.fromGrid(edgeGrid);
+}
+
+/*
+ * detect whether a certain point is edge
+ * return true if certain point is edge
+ */
+
+static bool isEdge(const Grid<int> & original, int row, int col, int diff) {
+    int pixel = original[row][col];
+    int red, green, blue;
+    GBufferedImage::getRedGreenBlue(pixel, red, green, blue);
+    for (int i = row-1; i <= row+1; row++) {
+        for (int j = col-1; j <= col+1; col++) {
+            if (original.inBounds(i,j)) {
+                int otherpixel = original[i][j];
+                int r,g,b;
+                GBufferedImage::getRedGreenBlue(otherpixel, r, g, b);
+                int d = calculateDifference(red, green, blue, r, g, b);
+                if (d > diff) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/*
+ * calculate the difference between color according to red, green, blue separately
+ */
+
+static int calculateDifference(int red, int green, int blue, int r, int g, int b) {
+    int rd = abs(red-r);
+    int gd = abs(green-g);
+    int bd = abs(blue-b);
+    int secondMax = max(rd, gd);
+    int Firstmax = max(bd, secondMax);
+    return Firstmax;
+}
+
+/*
+ * Ask user if they want to save the image or not.
+ * If yes, save the image with the name user gives.
+ */
+static void saveImage(const GBufferedImage & img) {
+    while (true) {
+        string filename = getLine("Enter filename to save image (or blank to skip saving):");
+        if (filename != "") {
+            if(saveImageToFilename(img, filename)) break;
+        }
+    }
+}
+
+/* STARTER CODE HELPER FUNCTION - DO NOT EDIT
+ *
+ * Attempts to save the image file to 'filename'.
+ *
+ * This function returns true when the image was successfully saved
+ * to the file specified, otherwise it returns false.
+ */
+static bool saveImageToFilename(const GBufferedImage & img, string filename) {
+    try {
+        img.save(filename);
+    } catch (...) {
+        return false;
+    }
+    return true;
+}
+
+/* STARTER CODE HELPER FUNCTION - DO NOT EDIT
+ *
+ * Waits for a mouse click in the GWindow and reports click location.
+ *
+ * When this function returns, row and col are set to the row and
+ * column where a mouse click was detected.
+ */
+static void getMouseClickLocation(int &row, int &col) {
+    GMouseEvent me;
+    do {
+        me = getNextEvent(MOUSE_EVENT);
+    } while (me.getEventType() != MOUSE_CLICKED);
+    row = me.getY();
+    col = me.getX();
+}
