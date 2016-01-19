@@ -139,7 +139,7 @@ static void dealWithImage(GBufferedImage & img, int n) {
         detectEdge(img, original);
         break;
     case 3:
-        //greenScreen();
+        //greenScreen(img, original);
         break;
     case 4:
         //compareImg();
@@ -156,12 +156,13 @@ static void scatter(GBufferedImage & img,const Grid<int> & original) {
     for (int row = 0; row < original.numRows(); row++) {
         for (int col = 0; col < original.numCols(); col++) {
             while (true) {
-                int rrow = row + randomInteger(1,r);
-                int rcol = col + randomInteger(1,r);
+                int rrow = row + randomInteger(-r,r);
+                int rcol = col + randomInteger(-r,r);
                 if(original.inBounds(rrow, rcol)) {
                     scatterGrid[row][col] = original[rrow][rcol];
                     break;
                 }
+                //cout << row << "," << col << endl;
             }
         }
     }
@@ -174,7 +175,7 @@ static void scatter(GBufferedImage & img,const Grid<int> & original) {
 static int askForNumber(string prompt, int min, int max) {
     int r;
     while (true) {
-        r = getInteger(prompt,"");
+        r = getInteger(prompt);
         if (r > min && r < max) break;
     }
     return r;
@@ -189,13 +190,11 @@ static void detectEdge(GBufferedImage & img,const Grid<int> & original) {
     Grid<int> edgeGrid(original.numRows(), original.numCols());
     for (int row = 0; row < original.numRows(); row++) {
         for (int col = 0; col < original.numCols(); col++) {
-            while (true) {
-                if (isEdge(original, row, col, diff)) {
-                    edgeGrid[row][col] = BLACK;
-                } else {
-                    edgeGrid[row][col] = WHITE;
-                }
-            }
+             if (isEdge(original, row, col, diff)) {
+                 edgeGrid[row][col] = BLACK;
+             } else {
+                 edgeGrid[row][col] = WHITE;
+             }
         }
     }
     img.fromGrid(edgeGrid);
@@ -210,8 +209,8 @@ static bool isEdge(const Grid<int> & original, int row, int col, int diff) {
     int pixel = original[row][col];
     int red, green, blue;
     GBufferedImage::getRedGreenBlue(pixel, red, green, blue);
-    for (int i = row-1; i <= row+1; row++) {
-        for (int j = col-1; j <= col+1; col++) {
+    for (int i = row-1; i <= row+1; i++) {
+        for (int j = col-1; j <= col+1; j++) {
             if (original.inBounds(i,j)) {
                 int otherpixel = original[i][j];
                 int r,g,b;
@@ -235,6 +234,34 @@ static int calculateDifference(int red, int green, int blue, int r, int g, int b
     int secondMax = max(rd, gd);
     int Firstmax = max(bd, secondMax);
     return Firstmax;
+}
+
+/*
+ * green screen with another image
+ */
+
+static void greenScreen(GBufferedImage & img,const Grid<int> & original) {
+
+    //openSticker();
+
+}
+
+/*
+ *
+ */
+
+static string openSticker(istream & infile, string prompt, GBufferedImage & img) {
+    string filename;
+    while (true) {
+        cout <<prompt;
+        getLine(cin, filename);
+        if(filename == "") break;
+        if(openImageFromFilename(img, filename)) {
+            cout << "Opening image file, may take a minute..." << endl;
+            break;
+        }
+    }
+    return filename;
 }
 
 /*
